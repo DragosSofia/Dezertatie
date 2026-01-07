@@ -1,0 +1,12 @@
+example\groups\ScenarioGroups$1.class
+example\AdvancedSimulation.class
+example\UserWorkflowSimulation.class
+example\groups\ScenarioGroups.class
+example\utils\TargetEnvResolver.class
+example\groups\ScenarioGroups$Product.class
+example\BasicSimulation.class
+example\utils\Keys.class
+example\utils\TargetEnvResolver$EnvInfo.class
+example\endpoints\APIendpoints.class
+example\endpoints\WebEndpoints.class
+example\utils\Config.class

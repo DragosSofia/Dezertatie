@@ -1,4 +1,6 @@
 package com.example.demo.Configuration;
+import com.example.demo.errors.LoginFailedException;
+import com.example.demo.errors.RegisterFailedException;
 import com.fasterxml.jackson.databind.exc.InvalidFormatException;
 import jakarta.validation.ConstraintViolationException;
 import org.springframework.http.HttpStatus;
@@ -62,4 +64,27 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(Map.of("message", "An unexpected error occurred", "error", ex.getMessage()));
     }
+
+    @ExceptionHandler(LoginFailedException.class)
+    public ResponseEntity<?> handleLoginFailed(LoginFailedException ex) {
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(Map.of(
+                        "timestamp", LocalDateTime.now(),
+                        "status", HttpStatus.UNAUTHORIZED.value(),
+                        "error", "Login failed",
+                        "message", ex.getMessage()
+                ));
+    }
+
+    @ExceptionHandler(RegisterFailedException.class)
+    public ResponseEntity<?> handleRegisterFailed(RegisterFailedException ex) {
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(Map.of(
+                        "timestamp", LocalDateTime.now(),
+                        "status", HttpStatus.UNAUTHORIZED.value(),
+                        "error", "Login failed",
+                        "message", ex.getMessage()
+                ));
+    }
+
 }

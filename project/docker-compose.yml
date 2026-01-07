@@ -20,7 +20,12 @@ services:
       - .env
     depends_on:
       - influxdb
-
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - "C:/master anu 1/ceretare/project/prometheus.yml:/etc/prometheus/prometheus.yml:ro"
+    ports:
+      - "9090:9090"
   grafana:
     image: grafana/grafana-oss:8.4.3
     volumes:
@@ -30,6 +35,20 @@ services:
     ports:
       - ${GRAFANA_PORT}:3000
 
+  postgres:
+    image: postgres:16
+    container_name: auth-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: authdb
+      POSTGRES_USER: authuser
+      POSTGRES_PASSWORD: authpass
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-storage:/var/lib/postgresql/dat
+
 volumes:
   grafana-storage:
   influxdb-storage:
+  postgres-storage:
