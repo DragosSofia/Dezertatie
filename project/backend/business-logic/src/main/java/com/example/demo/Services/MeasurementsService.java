@@ -64,7 +64,9 @@ public class MeasurementsService {
         String query = queryBuilderService.buildGetDataFromMeasurements(
                 measurement, fields,
                 additionalQueryInfo.getStartDate(),
-                additionalQueryInfo.getEndDate());
+                additionalQueryInfo.getEndDate(),
+                additionalQueryInfo.getAggregationTime(),
+                additionalQueryInfo.getAggregationType());
 
         queryApi.query(query).forEach(table -> {
             table.getRecords().forEach(record -> {

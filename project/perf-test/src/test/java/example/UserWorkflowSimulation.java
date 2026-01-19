@@ -32,11 +32,37 @@ public class UserWorkflowSimulation extends Simulation {
                     }
                     """;
 
+  String registerAccountBody =
+      """
+                    {
+                        "email": "${username}",
+                        "emailUpb": "${username}",
+                        "password": "${password}"
+                    }
+                    """;
+
   FeederBuilder.Batchable<String> userFeeder = csv("users.csv").circular();
 
   ScenarioBuilder scn =
-      scenario("User Login and Fetch Data")
+      scenario("User register")
           .feed(userFeeder)
+          .exec(
+              http("Register Account")
+                  .post("/auth/register")
+                  .body(
+                      StringBody(
+                          session ->
+                              """
+                                                                    {
+                                                                        "email": "%s",
+                                                                        "emailUpb": "%s",
+                                                                        "password": "%s"
+                                                                    }
+                                                                    """
+                                  .formatted(
+                                      session.getString("username"),
+                                      session.getString("username"),
+                                      session.getString("password")))))
           .exec(
               session -> {
                 System.out.println(
@@ -96,14 +122,17 @@ public class UserWorkflowSimulation extends Simulation {
                   .header("jwtCookie", "#{authToken}")
                   .check(status().is(200)))
           .exec(
-              http("Get Data")
-                  .get("/resource/measurements/weather/data?fields=temperature")
-                  .header("jwtCookie", "#{authToken}")
-                  .body(StringBody(getDataBody))
-                  .check(status().is(200)));
-  ;
+              repeat(15)
+                  .on(
+                      exec(
+                          http("Get Data")
+                              .get(
+                                  "/resource/measurements/weather/data?fields=temperature,humidity")
+                              .header("jwtCookie", "#{authToken}")
+                              .body(StringBody(getDataBody))
+                              .check(status().is(200)))));
 
   {
-    setUp(scn.injectOpen(rampUsers(20).during(30))).protocols(httpProtocol);
+    setUp(scn.injectOpen(rampUsers(1000).during(30))).protocols(httpProtocol);
   }
 }

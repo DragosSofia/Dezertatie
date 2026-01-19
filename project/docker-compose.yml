@@ -1,17 +1,41 @@
-version: "3"
+
 
 services:
   influxdb:
-    image: influxdb:2.1.1
+    image: influxdb:2.7
     volumes:
       - influxdb-storage:/var/lib/influxdb2:rw
     env_file:
       - .env
-    entrypoint: ["./entrypoint.sh"]
+#    entrypoint: ["./entrypoint.sh"]
+    environment:
+      INFLUXD_PROMETHEUS_ON: "true"
+      INFLUXD_PROMETHEUS_BIND_ADDRESS: ":8089"
     restart: on-failure:10
     ports:
       - ${DOCKER_INFLUXDB_INIT_PORT}:8086
-
+      - "8089:8089"
+  toxiproxy:
+    image: ghcr.io/shopify/toxiproxy:2.5.0
+    container_name: toxiproxy
+    ports:
+      - "8474:8474"   # Toxiproxy admin API
+      - "8085:8085"   # Proxy port fot influxdb
+      - "5433:5433"   # Proxy port for postgres
+    depends_on:
+      - influxdb
+      - postgres
+  toxiproxy-init:
+    image: curlimages/curl:8.5.0
+    container_name: toxiproxy-init
+    depends_on:
+      - toxiproxy
+      - influxdb
+      - postgres
+    volumes:
+      - ./toxiproxy-init.sh:/toxiproxy-init.sh:ro
+    entrypoint: [ "/bin/sh", "/toxiproxy-init.sh" ]
+    restart: "no"
   telegraf:
     image: telegraf:1.19
     volumes:
@@ -48,6 +72,15 @@ services:
     volumes:
       - postgres-storage:/var/lib/postgresql/dat
 
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter
+    container_name: postgres-exporter
+    environment:
+      DATA_SOURCE_NAME: "postgresql://authuser:authpass@postgres:5432/authdb?sslmode=disable"
+    ports:
+      - "9187:9187"
+    depends_on:
+      - postgres
 volumes:
   grafana-storage:
   influxdb-storage:

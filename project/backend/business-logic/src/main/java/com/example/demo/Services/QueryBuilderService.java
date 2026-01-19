@@ -24,7 +24,7 @@ public class QueryBuilderService {
         return String.format("from(bucket: \"mesurements\") |> range(start: -1d) |> filter(fn: (r) => r._measurement == \"%s\") |> group(columns: [\"_measurement\", \"_field\"]) |> distinct(column: \"_field\")", measurement);
     }
 
-    public String buildGetDataFromMeasurements(String measurement, List<String> fields, LocalDateTime start, LocalDateTime end){
+    public String buildGetDataFromMeasurements(String measurement, List<String> fields, LocalDateTime start, LocalDateTime end, String aggregationTime, String aggregationFunction){
         // Format start and end to ISO-8601 (RFC3339) required by InfluxDB
         DateTimeFormatter formatter = DateTimeFormatter.ISO_DATE_TIME;
 
@@ -44,6 +44,15 @@ public class QueryBuilderService {
                     .map(f -> String.format("r._field == \"%s\"", f))
                     .collect(Collectors.joining(" or "));
             fluxBuilder.append("\n|> filter(fn: (r) => ").append(fieldConditions).append(")");
+        }
+
+        // Aggregation (ONLY if both are provided)
+        if (aggregationTime != null && !aggregationTime.isBlank()
+                && aggregationFunction != null && !aggregationFunction.isBlank()) {
+
+            fluxBuilder.append(String.format("""
+            |> aggregateWindow(every: %s, fn: %s, createEmpty: false)
+            """, aggregationTime, aggregationFunction));
         }
 
         return fluxBuilder.toString();
