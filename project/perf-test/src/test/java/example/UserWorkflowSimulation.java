@@ -29,8 +29,8 @@ public class UserWorkflowSimulation extends Simulation {
   String getDataBody =
       """
                    {
-                    "startDate": "2026-01-18T01:30:00",
-                      "endDate": "2026-01-19T14:30:00"
+                    "startDate": "2026-05-16T01:30:00",
+                    "endDate": "2026-05-19T14:30:00"
                     }
                    """;
 

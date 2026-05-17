@@ -9,14 +9,15 @@ INFLUX_ORG = "org"
 INFLUX_BUCKET = "measurements"
 
 now = datetime.now(timezone.utc)
+start_of_today = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
 num_points = 1000
-total_seconds = 4 * 60 * 60  # 4 hours
+total_seconds = (now - start_of_today).total_seconds()
 step_seconds = total_seconds / num_points
 
 lines = []
 for i in range(num_points):
-    timestamp = now - timedelta(seconds=total_seconds - i * step_seconds)
+    timestamp = start_of_today + timedelta(seconds=i * step_seconds)
     timestamp_ns = int(timestamp.timestamp() * 1_000_000_000)
 
     temperature = 20 + i * 0.01
