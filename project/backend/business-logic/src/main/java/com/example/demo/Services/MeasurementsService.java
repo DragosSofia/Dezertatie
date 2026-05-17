@@ -8,6 +8,7 @@ import com.influxdb.client.InfluxDBClient;
 import com.influxdb.client.QueryApi;
 import com.influxdb.query.FluxTable;
 import lombok.AllArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -15,6 +16,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 public class MeasurementsService {
     private final AuthService authService;
@@ -28,19 +30,23 @@ public class MeasurementsService {
     }
 
     public List<String> getMeasurements(String token) {
+        log.debug("Fetching measurements list");
         String query = queryBuilderService.buildMeasurementsQuery();
         List<FluxTable> fluxTables = influxDBClient.getQueryApi().query(query);
 
         //get user
         authService.getUser(token);
 
-        return fluxTables.stream()
+        List<String> measurements = fluxTables.stream()
                 .flatMap(table -> table.getRecords().stream())
                 .map(record -> record.getValue().toString()) // Adjusted for the 'name' key
                 .collect(Collectors.toList());
+        log.info("Fetched {} measurements", measurements.size());
+        return measurements;
     }
 
     public List<String> getFields( String measurement, String token) {
+        log.debug("Fetching fields for measurement={}", measurement);
         //get user
          authService.getUser(token);
         // Query to fetch fields from a specific measurement in the bucket
@@ -48,13 +54,19 @@ public class MeasurementsService {
 
         List<FluxTable> fluxTables = influxDBClient.getQueryApi().query(query);
 
-        return fluxTables.stream()
+        List<String> fields = fluxTables.stream()
                 .flatMap(table -> table.getRecords().stream())
                 .map(record -> record.getValueByKey("_field") != null ? record.getValueByKey("_field").toString() : "Unknown")
                 .collect(Collectors.toList());
+        log.info("Fetched {} fields for measurement={}", fields.size(), measurement);
+        return fields;
     }
 
     public List<PointData> getData(String measurement, List<String> fields, AdditionalQueryInfo additionalQueryInfo, String token){
+        log.debug("Fetching data for measurement={}, fields={}, range=[{} - {}], aggregation={}/{}",
+                measurement, fields,
+                additionalQueryInfo.getStartDate(), additionalQueryInfo.getEndDate(),
+                additionalQueryInfo.getAggregationTime(), additionalQueryInfo.getAggregationType());
         //get user
         authService.getUser(token);
 
@@ -68,13 +80,18 @@ public class MeasurementsService {
                 additionalQueryInfo.getAggregationTime(),
                 additionalQueryInfo.getAggregationType());
 
-        queryApi.query(query).forEach(table -> {
-            table.getRecords().forEach(record -> {
-               // System.out.println(record.getTime() + " " + record.getField() + "=" + record.getValue());
-                result.add(new PointData(record.getField(), Objects.requireNonNull(record.getValue()).toString(),  record.getTime()));
-            });
+        try {
+            queryApi.query(query).forEach(table -> {
+                table.getRecords().forEach(record -> {
+                    result.add(new PointData(record.getField(), Objects.requireNonNull(record.getValue()).toString(),  record.getTime()));
+                });
 
-        });
+            });
+        } catch (Exception ex) {
+            log.error("Error querying InfluxDB for measurement={}: {}", measurement, ex.getMessage(), ex);
+            throw ex;
+        }
+        log.info("Fetched {} data points for measurement={}", result.size(), measurement);
         return result;
     }
 }

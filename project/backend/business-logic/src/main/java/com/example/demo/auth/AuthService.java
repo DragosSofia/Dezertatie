@@ -23,7 +23,9 @@ public class AuthService {
     private final WebClient authClient;
 
     public void registerUser(RegisterRequest registerRequest) {
+        log.debug("Registering user with email={}", registerRequest.getEmail());
         callRegisterEndpoint(registerRequest);
+        log.info("User registered successfully with email={}", registerRequest.getEmail());
     }
 
     private void callRegisterEndpoint(RegisterRequest registerRequest) {
@@ -35,17 +37,21 @@ public class AuthService {
                         HttpStatusCode::isError,
                         response -> response.bodyToMono(String.class)
                                 .defaultIfEmpty("No error body")
-                                .map(body -> new RegisterFailedException(
-                                        "Registration failed (" + response.statusCode() + "): " + body
-                                ))
+                                .map(body -> {
+                                    log.warn("Auth server returned error for register: status={}, body={}",
+                                            response.statusCode(), body);
+                                    return new RegisterFailedException(
+                                            "Registration failed (" + response.statusCode() + "): " + body
+                                    );
+                                })
                 )
                 .bodyToMono(Void.class)
                 .block();
     }
 
     public LoginResponse loginUser(LoginRequest loginRequest){
-        log.info("Logging in user with username: " + loginRequest.getUsername());
-        return authClient.post()
+        log.info("Logging in user with username={}", loginRequest.getUsername());
+        LoginResponse response = authClient.post()
                 .uri("/auth/login") // fixed typo: "loign" → "login"
                 .bodyValue(loginRequest)
                 .retrieve()
@@ -54,15 +60,22 @@ public class AuthService {
                         clientResponse -> clientResponse
                                 .bodyToMono(String.class)
                                 .defaultIfEmpty("No error body")
-                                .map(body -> new LoginFailedException(
-                                        "Login failed (" + clientResponse.statusCode() + "): " + body
-                                ))
+                                .map(body -> {
+                                    log.warn("Auth server returned error for login: username={}, status={}, body={}",
+                                            loginRequest.getUsername(), clientResponse.statusCode(), body);
+                                    return new LoginFailedException(
+                                            "Login failed (" + clientResponse.statusCode() + "): " + body
+                                    );
+                                })
                 )
                 .bodyToMono(LoginResponse.class)
                 .block();
+        log.debug("Login response received for username={}", loginRequest.getUsername());
+        return response;
     }
 
     public UserResponse getUser(String token){
+        log.debug("Fetching authenticated user from auth server");
         UserResponse userResponse =
                 authClient.post()
                 .uri("/auth/me")
@@ -77,9 +90,10 @@ public class AuthService {
                 .bodyToMono(UserResponse.class)
                 .block();
 
-        log.info("Got authenticated user: " + userResponse);
+        log.info("Got authenticated user: {}", userResponse);
 
         if (!isAuthenticated(userResponse)) {
+            log.warn("Authentication failed: token does not match any user");
             throw new InvalidTokenException("Token does not match any user");
         }
 

@@ -47,15 +47,18 @@ services:
   prometheus:
     image: prom/prometheus:latest
     volumes:
-      - "C:/master anu 1/ceretare/project/prometheus.yml:/etc/prometheus/prometheus.yml:ro"
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
     ports:
       - "9090:9090"
   grafana:
     image: grafana/grafana-oss:8.4.3
     volumes:
       - grafana-storage:/var/lib/grafana:rw
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
     depends_on:
       - influxdb
+      - prometheus
     ports:
       - ${GRAFANA_PORT}:3000
 

@@ -1,6 +1,7 @@
 package com.example.demo.Services;
 
 import com.example.demo.Configuration.InfluxProperties;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -8,6 +9,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 public class QueryBuilderService {
     private final InfluxProperties properties;
@@ -17,11 +19,15 @@ public class QueryBuilderService {
     }
 
     public String buildMeasurementsQuery() {
-        return String.format("import \"influxdata/influxdb/schema\"\n schema.measurements(bucket: \"%s\")", properties.getBucket());
+        String query = String.format("import \"influxdata/influxdb/schema\"\n schema.measurements(bucket: \"%s\")", properties.getBucket());
+        log.debug("Built measurements query: {}", query);
+        return query;
     }
 
     public String buildFieldsForMeasurementsQuery(String measurement) {
-        return String.format("from(bucket: \"mesurements\") |> range(start: -1d) |> filter(fn: (r) => r._measurement == \"%s\") |> group(columns: [\"_measurement\", \"_field\"]) |> distinct(column: \"_field\")", measurement);
+        String query = String.format("from(bucket: \"mesurements\") |> range(start: -1d) |> filter(fn: (r) => r._measurement == \"%s\") |> group(columns: [\"_measurement\", \"_field\"]) |> distinct(column: \"_field\")", measurement);
+        log.debug("Built fields query for measurement={}: {}", measurement, query);
+        return query;
     }
 
     public String buildGetDataFromMeasurements(String measurement, List<String> fields, LocalDateTime start, LocalDateTime end, String aggregationTime, String aggregationFunction){
@@ -55,6 +61,9 @@ public class QueryBuilderService {
             """, aggregationTime, aggregationFunction));
         }
 
-        return fluxBuilder.toString();
+        String query = fluxBuilder.toString();
+        log.debug("Built data query for measurement={}, range=[{} - {}]: {}",
+                measurement, formattedStart, formattedEnd, query);
+        return query;
     }
 }

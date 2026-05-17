@@ -1,7 +1,14 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
-# Current time in UTC
-now = datetime.utcnow()
+from influxdb_client import InfluxDBClient
+from influxdb_client.client.write_api import SYNCHRONOUS
+
+INFLUX_URL = "http://localhost:8086"
+INFLUX_TOKEN = "9e1e47d8e60f13ca12cccb05537e88c84aaa36d9d193ad2858fbb7daa06af7d2"
+INFLUX_ORG = "org"
+INFLUX_BUCKET = "measurements"
+
+now = datetime.now(timezone.utc)
 
 num_points = 1000
 total_seconds = 4 * 60 * 60  # 4 hours
@@ -9,22 +16,20 @@ step_seconds = total_seconds / num_points
 
 lines = []
 for i in range(num_points):
-    # Spread points evenly over the last 4 hours
     timestamp = now - timedelta(seconds=total_seconds - i * step_seconds)
-
-    # Convert to nanoseconds
     timestamp_ns = int(timestamp.timestamp() * 1_000_000_000)
 
-    # Example varying data
-    temperature = 20 + i * 0.01      # slow increase
-    humidity = 60 - i * 0.02         # slow decrease
+    temperature = 20 + i * 0.01
+    humidity = 60 - i * 0.02
 
-    line = (
+    lines.append(
         f"weather,location=upb "
         f"temperature={temperature:.2f},humidity={humidity:.2f} "
         f"{timestamp_ns}"
     )
-    lines.append(line)
 
-# Output result
-print("\n".join(lines))
+with InfluxDBClient(url=INFLUX_URL, token=INFLUX_TOKEN, org=INFLUX_ORG) as client:
+    with client.write_api(write_options=SYNCHRONOUS) as write_api:
+        write_api.write(bucket=INFLUX_BUCKET, record=lines)
+
+print(f"Wrote {len(lines)} points to bucket '{INFLUX_BUCKET}' (measurement 'weather').")

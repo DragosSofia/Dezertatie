@@ -1,6 +1,7 @@
 package org.example.auth.cotrollers;
 
 import lombok.AllArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.example.auth.dtos.RegisterDto;
 import org.example.auth.mappers.RegisterMapper;
 import org.example.auth.request.LoginRequest;
@@ -16,6 +17,7 @@ import org.springframework.web.bind.annotation.*;
 
 @RestController
 @AllArgsConstructor
+@Slf4j
 @RequestMapping("/auth")
 public class AuthController {
     private final AuthService authService;
@@ -44,8 +46,9 @@ public class AuthController {
         if (token == null || token.isBlank()) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
-
+        log.info("Retrieving user information for token: {}", token);
         UserResponse response = authService.getUserFromToken(token);
+        log.info("found user for token: {}", response);
         return ResponseEntity.ok(response);
     }
 }

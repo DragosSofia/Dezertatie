@@ -24,15 +24,19 @@ public class AuthController {
 
     @PostMapping("/register")
     public ResponseEntity<?> register(@RequestBody RegisterRequest req) {
+        log.info("POST /auth/register received for email={}, emailUpb={}", req.getEmail(), req.getEmailUpb());
         authService.registerUser(req);
+        log.info("Registration completed for email={}", req.getEmail());
         return ResponseEntity.ok(Map.of("message", "User registered successfully"));
     }
 
     @PostMapping("/login")
     public ResponseEntity<LoginResponse> login(@RequestBody LoginRequest req) {
+        log.info("POST /auth/login received for username={}", req.getUsername());
         LoginResponse token = authService.loginUser(
                 req
         );
+        log.info("Login successful for username={}", req.getUsername());
         return ResponseEntity.ok(token);
     }
 

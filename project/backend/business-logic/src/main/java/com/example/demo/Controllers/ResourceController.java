@@ -28,19 +28,28 @@ public class ResourceController {
     @GetMapping("weather")
     @ResponseBody
     public String weather() {
-        return weatherService.getWeatherData();
+        log.info("GET /resource/weather received");
+        String result = weatherService.getWeatherData();
+        log.debug("Weather response: {}", result);
+        return result;
     }
 
     @GetMapping("/measurements")
     @ResponseBody
     public List<String> getMeasurements(@RequestHeader(AppConstants.tokenName) String token) {
-        return measurementsService.getMeasurements(token);
+        log.info("GET /resource/measurements received");
+        List<String> measurements = measurementsService.getMeasurements(token);
+        log.info("Returning {} measurements", measurements.size());
+        return measurements;
     }
 
     @GetMapping("/measurements/{measurementName}/fields")
     @ResponseBody
     public List<String> getFields(@PathVariable String measurementName, @RequestHeader(AppConstants.tokenName) String token) {
-        return measurementsService.getFields(measurementName, token);
+        log.info("GET /resource/measurements/{}/fields received", measurementName);
+        List<String> fields = measurementsService.getFields(measurementName, token);
+        log.info("Returning {} fields for measurement={}", fields.size(), measurementName);
+        return fields;
     }
 
     @GetMapping("/measurements/{measurementName}/data")
@@ -50,7 +59,10 @@ public class ResourceController {
                                    @Valid @RequestBody AdditionalQueryInfo additionalQueryInfo,
                                    @RequestHeader(AppConstants.tokenName) String token
                                    ) {
-        log.info("Received data request with: measurement:{}, fields:{}, body:{}", measurementName,  fields, additionalQueryInfo);
-        return measurementsService.getData(measurementName, fields, additionalQueryInfo, token);
+        log.info("GET /resource/measurements/{}/data received with fields={}, queryInfo={}",
+                measurementName, fields, additionalQueryInfo);
+        List<PointData> data = measurementsService.getData(measurementName, fields, additionalQueryInfo, token);
+        log.info("Returning {} data points for measurement={}", data.size(), measurementName);
+        return data;
     }
 }
