@@ -1,0 +1,10 @@
+Version 1 sync calls to third parties
+
+Every request makes a sync HTTP call to the auth server
+MeasurementsService calls authService.getUser(token) on every endpoint. That's an HTTP round-trip per request, blocking a Tomcat thread until the auth server responds. Under load, this serializes throughput.
+
+ WebClient.block() is the worst of both worlds
+AuthService uses reactive WebClient but calls .block() on every result. You pay the reactive machinery overhead without getting non-blocking behavior, and you're blocking Tomcat threads on Netty's event loop work.
+
+Sequential auth + Influx calls in MeasurementsService
+getMeasurements/getFields/getData do auth-check then Influx query, both blocking. If you keep blocking I/O, parallelizing them with CompletableFuture cuts latency roughly in half — though it also wastes Influx work when auth fails. With caching from #2, this becomes mostly irrelevant.
