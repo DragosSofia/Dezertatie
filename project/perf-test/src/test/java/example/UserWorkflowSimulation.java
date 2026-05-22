@@ -124,7 +124,7 @@ public class UserWorkflowSimulation extends Simulation {
                   .header("jwtCookie", "#{authToken}")
                   .check(status().is(200)))
           .exec(
-              repeat(15)
+              repeat(25)
                   .on(
                       exec(
                           http("Get Data")
