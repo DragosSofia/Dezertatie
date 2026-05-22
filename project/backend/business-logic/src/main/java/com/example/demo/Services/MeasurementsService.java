@@ -1,5 +1,6 @@
 package com.example.demo.Services;
 
+import com.example.demo.Configuration.BusinessMetrics;
 import com.example.demo.Configuration.InfluxProperties;
 import com.example.demo.Models.PointData;
 import com.example.demo.auth.AuthService;
@@ -7,6 +8,7 @@ import com.example.demo.dto.request.AdditionalQueryInfo;
 import com.influxdb.client.InfluxDBClient;
 import com.influxdb.client.QueryApi;
 import com.influxdb.query.FluxTable;
+import io.micrometer.core.instrument.Timer;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
@@ -26,15 +28,18 @@ public class MeasurementsService {
     private final InfluxDBClient influxDBClient;
     private final QueryBuilderService queryBuilderService;
     private final Executor ioExecutor;
+    private final BusinessMetrics metrics;
 
     public MeasurementsService(AuthService authService,
                                InfluxDBClient influxDBClient,
                                QueryBuilderService queryBuilderService,
-                               @Qualifier("ioExecutor") Executor ioExecutor) {
+                               @Qualifier("ioExecutor") Executor ioExecutor,
+                               BusinessMetrics metrics) {
         this.authService = authService;
         this.influxDBClient = influxDBClient;
         this.queryBuilderService = queryBuilderService;
         this.ioExecutor = ioExecutor;
+        this.metrics = metrics;
     }
 
     public List<String> getMeasurements(String token) {
@@ -44,15 +49,24 @@ public class MeasurementsService {
                 () -> authService.getUser(token), ioExecutor);
 
         CompletableFuture<List<String>> queryFuture = CompletableFuture.supplyAsync(() -> {
-            String query = queryBuilderService.buildMeasurementsQuery();
-            List<FluxTable> fluxTables = influxDBClient.getQueryApi().query(query);
-            return fluxTables.stream()
-                    .flatMap(table -> table.getRecords().stream())
-                    .map(record -> record.getValue().toString())
-                    .collect(Collectors.toList());
+            Timer.Sample sample = Timer.start(metrics.registry());
+            try {
+                String query = queryBuilderService.buildMeasurementsQuery();
+                List<FluxTable> fluxTables = influxDBClient.getQueryApi().query(query);
+                return fluxTables.stream()
+                        .flatMap(table -> table.getRecords().stream())
+                        .map(record -> record.getValue().toString())
+                        .collect(Collectors.toList());
+            } catch (RuntimeException ex) {
+                metrics.recordInfluxError("listMeasurements");
+                throw ex;
+            } finally {
+                sample.stop(metrics.influxTimer("listMeasurements"));
+            }
         }, ioExecutor);
 
         List<String> measurements = joinBoth(authFuture, queryFuture);
+        metrics.recordMeasurementsReturned(measurements.size());
         log.info("Fetched {} measurements", measurements.size());
         return measurements;
     }
@@ -64,17 +78,26 @@ public class MeasurementsService {
                 () -> authService.getUser(token), ioExecutor);
 
         CompletableFuture<List<String>> queryFuture = CompletableFuture.supplyAsync(() -> {
-            String query = queryBuilderService.buildFieldsForMeasurementsQuery(measurement);
-            List<FluxTable> fluxTables = influxDBClient.getQueryApi().query(query);
-            return fluxTables.stream()
-                    .flatMap(table -> table.getRecords().stream())
-                    .map(record -> record.getValueByKey("_field") != null
-                            ? record.getValueByKey("_field").toString()
-                            : "Unknown")
-                    .collect(Collectors.toList());
+            Timer.Sample sample = Timer.start(metrics.registry());
+            try {
+                String query = queryBuilderService.buildFieldsForMeasurementsQuery(measurement);
+                List<FluxTable> fluxTables = influxDBClient.getQueryApi().query(query);
+                return fluxTables.stream()
+                        .flatMap(table -> table.getRecords().stream())
+                        .map(record -> record.getValueByKey("_field") != null
+                                ? record.getValueByKey("_field").toString()
+                                : "Unknown")
+                        .collect(Collectors.toList());
+            } catch (RuntimeException ex) {
+                metrics.recordInfluxError("listFields");
+                throw ex;
+            } finally {
+                sample.stop(metrics.influxTimer("listFields"));
+            }
         }, ioExecutor);
 
         List<String> fields = joinBoth(authFuture, queryFuture);
+        metrics.recordFieldsReturned(fields.size());
         log.info("Fetched {} fields for measurement={}", fields.size(), measurement);
         return fields;
     }
@@ -89,25 +112,34 @@ public class MeasurementsService {
                 () -> authService.getUser(token), ioExecutor);
 
         CompletableFuture<List<PointData>> queryFuture = CompletableFuture.supplyAsync(() -> {
-            QueryApi queryApi = influxDBClient.getQueryApi();
-            String query = queryBuilderService.buildGetDataFromMeasurements(
-                    measurement, fields,
-                    additionalQueryInfo.getStartDate(),
-                    additionalQueryInfo.getEndDate(),
-                    additionalQueryInfo.getAggregationTime(),
-                    additionalQueryInfo.getAggregationType());
+            Timer.Sample sample = Timer.start(metrics.registry());
+            try {
+                QueryApi queryApi = influxDBClient.getQueryApi();
+                String query = queryBuilderService.buildGetDataFromMeasurements(
+                        measurement, fields,
+                        additionalQueryInfo.getStartDate(),
+                        additionalQueryInfo.getEndDate(),
+                        additionalQueryInfo.getAggregationTime(),
+                        additionalQueryInfo.getAggregationType());
 
-            List<PointData> result = new ArrayList<>();
-            queryApi.query(query).forEach(table ->
-                    table.getRecords().forEach(record ->
-                            result.add(new PointData(
-                                    record.getField(),
-                                    Objects.requireNonNull(record.getValue()).toString(),
-                                    record.getTime()))));
-            return result;
+                List<PointData> result = new ArrayList<>();
+                queryApi.query(query).forEach(table ->
+                        table.getRecords().forEach(record ->
+                                result.add(new PointData(
+                                        record.getField(),
+                                        Objects.requireNonNull(record.getValue()).toString(),
+                                        record.getTime()))));
+                return result;
+            } catch (RuntimeException ex) {
+                metrics.recordInfluxError("getData");
+                throw ex;
+            } finally {
+                sample.stop(metrics.influxTimer("getData"));
+            }
         }, ioExecutor);
 
         List<PointData> data = joinBoth(authFuture, queryFuture);
+        metrics.recordPointsReturned(data.size());
         log.info("Fetched {} data points for measurement={}", data.size(), measurement);
         return data;
     }

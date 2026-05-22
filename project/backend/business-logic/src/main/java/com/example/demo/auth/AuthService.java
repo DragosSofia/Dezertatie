@@ -1,5 +1,6 @@
 package com.example.demo.auth;
 
+import com.example.demo.Configuration.BusinessMetrics;
 import com.example.demo.auth.requests.LoginRequest;
 import com.example.demo.auth.requests.RegisterRequest;
 import com.example.demo.auth.responses.LoginResponse;
@@ -8,7 +9,7 @@ import com.example.demo.constants.AppConstants;
 import com.example.demo.errors.InvalidTokenException;
 import com.example.demo.errors.LoginFailedException;
 import com.example.demo.errors.RegisterFailedException;
-import lombok.AllArgsConstructor;
+import io.micrometer.core.instrument.Timer;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.stereotype.Service;
@@ -17,15 +18,28 @@ import reactor.core.publisher.Mono;
 
 @Slf4j
 @Service
-@AllArgsConstructor
 public class AuthService {
 
     private final WebClient authClient;
+    private final BusinessMetrics metrics;
+
+    public AuthService(WebClient authClient, BusinessMetrics metrics) {
+        this.authClient = authClient;
+        this.metrics = metrics;
+    }
 
     public void registerUser(RegisterRequest registerRequest) {
         log.debug("Registering user with email={}", registerRequest.getEmail());
-        callRegisterEndpoint(registerRequest);
-        log.info("User registered successfully with email={}", registerRequest.getEmail());
+        Timer.Sample sample = Timer.start(metrics.registry());
+        try {
+            callRegisterEndpoint(registerRequest);
+            log.info("User registered successfully with email={}", registerRequest.getEmail());
+        } catch (RuntimeException ex) {
+            metrics.recordAuthClientError("register", ex.getClass().getSimpleName());
+            throw ex;
+        } finally {
+            sample.stop(metrics.authClientTimer("register"));
+        }
     }
 
     private void callRegisterEndpoint(RegisterRequest registerRequest) {
@@ -51,53 +65,73 @@ public class AuthService {
 
     public LoginResponse loginUser(LoginRequest loginRequest){
         log.info("Logging in user with username={}", loginRequest.getUsername());
-        LoginResponse response = authClient.post()
-                .uri("/auth/login") // fixed typo: "loign" → "login"
-                .bodyValue(loginRequest)
-                .retrieve()
-                .onStatus(
-                        HttpStatusCode::isError,   // <-- any non-2xx
-                        clientResponse -> clientResponse
-                                .bodyToMono(String.class)
-                                .defaultIfEmpty("No error body")
-                                .map(body -> {
-                                    log.warn("Auth server returned error for login: username={}, status={}, body={}",
-                                            loginRequest.getUsername(), clientResponse.statusCode(), body);
-                                    return new LoginFailedException(
-                                            "Login failed (" + clientResponse.statusCode() + "): " + body
-                                    );
-                                })
-                )
-                .bodyToMono(LoginResponse.class)
-                .block();
-        log.debug("Login response received for username={}", loginRequest.getUsername());
-        return response;
+        Timer.Sample sample = Timer.start(metrics.registry());
+        try {
+            LoginResponse response = authClient.post()
+                    .uri("/auth/login")
+                    .bodyValue(loginRequest)
+                    .retrieve()
+                    .onStatus(
+                            HttpStatusCode::isError,
+                            clientResponse -> clientResponse
+                                    .bodyToMono(String.class)
+                                    .defaultIfEmpty("No error body")
+                                    .map(body -> {
+                                        log.warn("Auth server returned error for login: username={}, status={}, body={}",
+                                                loginRequest.getUsername(), clientResponse.statusCode(), body);
+                                        return new LoginFailedException(
+                                                "Login failed (" + clientResponse.statusCode() + "): " + body
+                                        );
+                                    })
+                    )
+                    .bodyToMono(LoginResponse.class)
+                    .block();
+            log.debug("Login response received for username={}", loginRequest.getUsername());
+            return response;
+        } catch (RuntimeException ex) {
+            metrics.recordAuthClientError("login", ex.getClass().getSimpleName());
+            throw ex;
+        } finally {
+            sample.stop(metrics.authClientTimer("login"));
+        }
     }
 
     public UserResponse getUser(String token){
         log.debug("Fetching authenticated user from auth server");
-        UserResponse userResponse =
-                authClient.post()
-                .uri("/auth/me")
-                        .header(AppConstants.tokenName, token)
-                .retrieve()
-                        .onStatus(
-                                status -> status.value() == 429, // handle 429
-                                clientResponse -> {
-                                    log.error("Rate limit exceeded: 429 Too Many Requests");
-                                    return Mono.error(new InvalidTokenException("Too many requests to auth server"));
-                                })
-                .bodyToMono(UserResponse.class)
-                .block();
+        Timer.Sample sample = Timer.start(metrics.registry());
+        try {
+            UserResponse userResponse =
+                    authClient.post()
+                            .uri("/auth/me")
+                            .header(AppConstants.tokenName, token)
+                            .retrieve()
+                            .onStatus(
+                                    status -> status.value() == 429,
+                                    clientResponse -> {
+                                        log.error("Rate limit exceeded: 429 Too Many Requests");
+                                        metrics.recordAuthClientError("me", "RateLimited");
+                                        return Mono.error(new InvalidTokenException("Too many requests to auth server"));
+                                    })
+                            .bodyToMono(UserResponse.class)
+                            .block();
 
-        log.info("Got authenticated user: {}", userResponse);
+            log.info("Got authenticated user: {}", userResponse);
 
-        if (!isAuthenticated(userResponse)) {
-            log.warn("Authentication failed: token does not match any user");
-            throw new InvalidTokenException("Token does not match any user");
+            if (!isAuthenticated(userResponse)) {
+                log.warn("Authentication failed: token does not match any user");
+                metrics.recordAuthClientError("me", "InvalidToken");
+                throw new InvalidTokenException("Token does not match any user");
+            }
+
+            return userResponse;
+        } catch (RuntimeException ex) {
+            if (!(ex instanceof InvalidTokenException)) {
+                metrics.recordAuthClientError("me", ex.getClass().getSimpleName());
+            }
+            throw ex;
+        } finally {
+            sample.stop(metrics.authClientTimer("me"));
         }
-
-        return userResponse;
     }
 
     public boolean isAuthenticated(UserResponse user){

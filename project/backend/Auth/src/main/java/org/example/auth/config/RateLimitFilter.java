@@ -24,6 +24,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
 
     private final Map<String, Bucket> buckets = new ConcurrentHashMap<>();
     private final JwtService jwtService;
+    private final AuthMetrics authMetrics;
 
     @Value("${rate-limit.requests}")
     private int maxRequests;
@@ -31,8 +32,9 @@ public class RateLimitFilter extends OncePerRequestFilter {
     @Value("${rate-limit.minutes}")
     private int windowMinutes;
 
-    public RateLimitFilter(JwtService jwtService) {
+    public RateLimitFilter(JwtService jwtService, AuthMetrics authMetrics) {
         this.jwtService = jwtService;
+        this.authMetrics = authMetrics;
     }
 
     private Bucket createBucket() {
@@ -76,6 +78,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
         try {
             email = jwtService.extractUsername(token);
         } catch (Exception e) {
+            authMetrics.recordJwtError();
             throw new UnauthorizedException("Invalid JWT token");
         }
 
@@ -84,6 +87,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
         if (bucket.tryConsume(1)) {
             filterChain.doFilter(request, response);
         } else {
+            authMetrics.recordRateLimitHit();
             response.setStatus(429);
             response.setContentType("application/json");
             response.setCharacterEncoding("UTF-8");
