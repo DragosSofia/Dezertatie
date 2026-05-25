@@ -8,3 +8,40 @@ AuthService uses reactive WebClient but calls .block() on every result. You pay 
 
 Sequential auth + Influx calls in MeasurementsService
 getMeasurements/getFields/getData do auth-check then Influx query, both blocking. If you keep blocking I/O, parallelizing them with CompletableFuture cuts latency roughly in half — though it also wastes Influx work when auth fails. With caching from #2, this becomes mostly irrelevant.
+
+Version 3 virtual threads
+1. The ioExecutor went from bounded to effectively unbounded
+project/backend/business-logic/src/main/java/com/example/demo/Configuration/ExecutorConfig.java
+threads-right-way:
+ThreadPoolTaskExecutor: core=16, max=64, queue=200, CallerRunsPolicy
+Caps concurrency at 64 and applies backpressure (CallerRunsPolicy runs work on the caller when the queue fills).
+virtual-threads:
+Executors.newThreadPerTaskExecutor(Thread.ofVirtual().name("io-vt-", 0).factory())
+Spawns a fresh virtual thread per task. There is no cap, no queue, no rejection policy.
+Under load every incoming request fans out two supplyAsync(..., ioExecutor) calls (auth + influx), and now each one gets its own brand-new virtual thread. So if 500 requests are in flight, you have ~1000 simultaneous downstream calls instead of the 64 + 200-queue you had before.
+2. The bottleneck just moved — and got worse
+The InfluxDB Java client uses OkHttp under the hood, which has a Dispatcher with a default maxRequestsPerHost=5. When 1000 virtual threads try to query Influx, ~5 actually run and the rest sit in the dispatcher queue. Same story for Reactor Netty's connection pool driving the WebClient calls to Auth. The "virtualness" of the threads doesn't help — the contention point is the HTTP client's connection pool, and now you've stacked far more work onto it than before.
+Meanwhile Influx itself has a finite query-execution capacity. With backpressure gone, queries pile up server-side and tail latency explodes.
+3. Rate limiter on Auth starts firing 429s
+project/backend/Auth/src/main/java/org/example/auth/config/RateLimitFilter.java is still per-user token-bucket. Every business-logic request triggers an /auth/me call. With unbounded fan-out, you hit the limit and AuthService.getUser throws InvalidTokenException("Too many requests to auth server") — which then turns successful work into thrown exceptions. The new metrics.recordAuthClientError("me", "RateLimited") counter will show this clearly.
+4. WebClient.block() on a virtual thread can pin the carrier
+project/backend/business-logic/src/main/java/com/example/demo/auth/AuthService.java still uses authClient.post()...block(). With spring.threads.virtual.enabled=true, the calling thread is a virtual thread. That's legal, but any synchronized block held during the wait (Reactor has a few, OkHttp has more) pins the virtual thread to its carrier — and you have as many carriers as CPU cores. A few pinned carriers under load = head-of-line blocking that simply cannot happen on the platform-thread version.
+You can confirm with -Djdk.tracePinnedThreads=full on the JVM.
+5. BCrypt + virtual threads is a bad combo
+Auth's passwordEncoder.matches(...) is CPU-bound BCrypt. Virtual threads buy you nothing on CPU-bound work — and while BCrypt is running it holds the carrier. With spring.threads.virtual.enabled=true you now have only ~N-cores carriers handling everything, and BCrypt logins eat them.
+6. Metric overhead grew, but it's small
+The new publishPercentileHistogram + SLO buckets on http.server.requests, http.client.requests, and every custom timer adds HdrHistograms per meter. Real but a few percent at most — not the cause of "plummeted."
+What to try
+1.
+Cap the OkHttp/Influx dispatcher — bump maxRequestsPerHost (try 32–64) and maxRequests on the InfluxDB client's OkHttpClient.Builder. Without this, virtual threads can't help you.
+2.
+Reintroduce backpressure on the ioExecutor. Either wrap the virtual-thread factory with a Semaphore (acquire before submit) sized to your downstream capacity, or use a SemaphoreBoundedExecutor pattern. Pure thread-per-task on Influx-backed code is rarely what you want.
+3.
+Don't put BCrypt on virtual threads. Run the password-hashing on a small bounded platform-thread pool, or accept the CPU bottleneck explicitly.
+4.
+Turn on -Djdk.tracePinnedThreads=short during the perf test — if you see pinning under load, that's a separate, real problem.
+5.
+Check Auth 429 counter (auth.rate_limit.hits or whatever the metric ended up named) during the failing run. If it's elevated, raise rate-limit.requests for the perf test or you're measuring rate-limiter behavior, not throughput.
+6.
+Compare under matched concurrency. If the perf test is open-loop, virtual threads will accept more in-flight requests and Little's Law guarantees worse latency. Pin the test to the same concurrency level for an apples-to-apples comparison.
+The short version: you replaced a bounded pool with an unbounded one and disabled your only backpressure mechanism. Virtual threads aren't slower — they just stopped protecting your downstreams.
