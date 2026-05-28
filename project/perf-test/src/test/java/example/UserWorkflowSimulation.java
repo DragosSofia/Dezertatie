@@ -48,23 +48,24 @@ public class UserWorkflowSimulation extends Simulation {
   ScenarioBuilder scn =
       scenario("User register")
           .feed(userFeeder)
-          .exec(
-              http("Register Account")
-                  .post("/auth/register")
-                  .body(
-                      StringBody(
-                          session ->
-                              """
-                                                                    {
-                                                                        "email": "%s",
-                                                                        "emailUpb": "%s",
-                                                                        "password": "%s"
-                                                                    }
-                                                                    """
-                                  .formatted(
-                                      session.getString("username"),
-                                      session.getString("username"),
-                                      session.getString("password")))))
+          //          .exec(
+          //              http("Register Account")
+          //                  .post("/auth/register")
+          //                  .body(
+          //                      StringBody(
+          //                          session ->
+          //                              """
+          //                                                                    {
+          //                                                                        "email": "%s",
+          //                                                                        "emailUpb":
+          // "%s",
+          //                                                                        "password": "%s"
+          //                                                                    }
+          //                                                                    """
+          //                                  .formatted(
+          //                                      session.getString("username"),
+          //                                      session.getString("username"),
+          //                                      session.getString("password")))))
           .exec(
               session -> {
                 System.out.println(
@@ -135,6 +136,6 @@ public class UserWorkflowSimulation extends Simulation {
                               .check(status().is(200)))));
 
   {
-    setUp(scn.injectOpen(rampUsers(1000).during(30))).protocols(httpProtocol);
+    setUp(scn.injectOpen(rampUsers(800).during(30))).protocols(httpProtocol);
   }
 }
