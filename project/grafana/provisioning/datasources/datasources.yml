@@ -1,0 +1,24 @@
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    uid: prometheus-ds
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: true
+
+  - name: InfluxDB
+    type: influxdb
+    uid: influxdb-ds
+    access: proxy
+    url: http://influxdb:8086
+    jsonData:
+      version: Flux
+      organization: org
+      defaultBucket: measurements
+      tlsSkipVerify: true
+    secureJsonData:
+      token: 9e1e47d8e60f13ca12cccb05537e88c84aaa36d9d193ad2858fbb7daa06af7d2
+    editable: true

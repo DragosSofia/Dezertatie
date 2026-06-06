@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(py --version)",
+      "Bash(winget --version)",
+      "Bash(cmd.exe //c \"winget --version\")",
+      "Bash(powershell.exe -Command \"winget --version\")",
+      "Bash(./mvnw -q -DskipTests compile)",
+      "Bash(where java *)",
+      "Bash(java -version)",
+      "Bash(git -C C:\\\\Users\\\\Olaf\\\\dEVELOP\\\\Dezertatie log --oneline -20)"
+    ]
+  }
+}

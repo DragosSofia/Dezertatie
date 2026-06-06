@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:repo1.maven.org)",
+      "WebSearch",
+      "Bash(Select-Object FullName)",
+      "Bash(git -C C:/Users/Olaf/dEVELOP/Dezertatie/project/perf-test show feature/virtual-threads-fix-finetune:project/backend/Auth/src/main/java/org/example/auth/services/AuthService.java)"
+    ]
+  }
+}

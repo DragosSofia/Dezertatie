@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./mvnw compile *)",
+      "Bash(tee /tmp/diff.txt)",
+      "Read(//tmp/**)",
+      "Bash(git show *)",
+      "Bash(./mvnw.cmd -q -DskipTests compile)",
+      "Bash(where mvn *)",
+      "Bash(where mvnw *)",
+      "Bash(cmd.exe /c \"where mvn 2>nul & where java 2>nul & java -version 2>&1\")",
+      "Bash(ls \"/c/Program Files\" 2>&1 | head -30)",
+      "Bash(ls \"/c/Program Files/JetBrains/\" 2>&1 ; echo \"---\" ; ls \"/c/Users/Olaf/\" 2>&1 | head -30)",
+      "Bash([ -e \"$JBR\" ])",
+      "Bash('/c/Program Files/JetBrains/IntelliJ IDEA 2026.1.2/jbr/bin/java.exe' -version)",
+      "Bash(find /c/Users/Olaf -maxdepth 6 -type d -name \"apache-maven-*\" 2>/dev/null | head -5)",
+      "Bash(mvn -v)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)"
+    ]
+  }
+}
