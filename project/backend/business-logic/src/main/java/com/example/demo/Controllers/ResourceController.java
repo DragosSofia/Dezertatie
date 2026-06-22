@@ -5,6 +5,7 @@ import com.example.demo.Services.MeasurementsService;
 import com.example.demo.Services.WeatherService;
 import com.example.demo.constants.AppConstants;
 import com.example.demo.dto.request.AdditionalQueryInfo;
+import com.example.demo.dto.request.TimeRangeInfo;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
 import lombok.extern.slf4j.Slf4j;
@@ -43,11 +44,13 @@ public class ResourceController {
         return measurements;
     }
 
-    @GetMapping("/measurements/{measurementName}/fields")
+    @PostMapping("/measurements/{measurementName}/fields")
     @ResponseBody
-    public List<String> getFields(@PathVariable String measurementName, @RequestHeader(AppConstants.tokenName) String token) {
-        log.info("GET /resource/measurements/{}/fields received", measurementName);
-        List<String> fields = measurementsService.getFields(measurementName, token);
+    public List<String> getFields(@PathVariable String measurementName,
+                                   @RequestBody(required = false) TimeRangeInfo timeRangeInfo,
+                                   @RequestHeader(AppConstants.tokenName) String token) {
+        log.info("POST /resource/measurements/{}/fields received with timeRange={}", measurementName, timeRangeInfo);
+        List<String> fields = measurementsService.getFields(measurementName, timeRangeInfo, token);
         log.info("Returning {} fields for measurement={}", fields.size(), measurementName);
         return fields;
     }

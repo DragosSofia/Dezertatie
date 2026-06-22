@@ -24,9 +24,16 @@ public class QueryBuilderService {
         return query;
     }
 
-    public String buildFieldsForMeasurementsQuery(String measurement) {
-        String query = String.format("from(bucket: \"mesurements\") |> range(start: -1d) |> filter(fn: (r) => r._measurement == \"%s\") |> group(columns: [\"_measurement\", \"_field\"]) |> distinct(column: \"_field\")", measurement);
-        log.debug("Built fields query for measurement={}: {}", measurement, query);
+    public String buildFieldsForMeasurementsQuery(String measurement, LocalDateTime start, LocalDateTime end) {
+        // Format start and end to ISO-8601 (RFC3339) required by InfluxDB
+        DateTimeFormatter formatter = DateTimeFormatter.ISO_DATE_TIME;
+        String formattedStart = start.format(formatter) + "Z"; // Influx expects Zulu time (UTC)
+        String formattedEnd = end.format(formatter) + "Z";
+
+        String query = String.format(
+                "from(bucket: \"mesurements\") |> range(start: %s, stop: %s) |> filter(fn: (r) => r._measurement == \"%s\") |> group(columns: [\"_measurement\", \"_field\"]) |> distinct(column: \"_field\")",
+                formattedStart, formattedEnd, measurement);
+        log.info("Built fields query for measurement={}, range=[{} - {}]: {}", measurement, formattedStart, formattedEnd, query);
         return query;
     }
 

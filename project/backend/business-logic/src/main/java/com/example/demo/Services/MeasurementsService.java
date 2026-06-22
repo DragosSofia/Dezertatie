@@ -4,6 +4,7 @@ import com.example.demo.Configuration.InfluxProperties;
 import com.example.demo.Models.PointData;
 import com.example.demo.auth.AuthService;
 import com.example.demo.dto.request.AdditionalQueryInfo;
+import com.example.demo.dto.request.TimeRangeInfo;
 import com.influxdb.client.InfluxDBClient;
 import com.influxdb.client.QueryApi;
 import com.influxdb.query.FluxTable;
@@ -11,6 +12,7 @@ import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -45,12 +47,21 @@ public class MeasurementsService {
         return measurements;
     }
 
-    public List<String> getFields( String measurement, String token) {
-        log.debug("Fetching fields for measurement={}", measurement);
+    public List<String> getFields( String measurement, TimeRangeInfo timeRangeInfo, String token) {
+        // Use default time range if not provided
+        if (timeRangeInfo == null) {
+            timeRangeInfo = new TimeRangeInfo();
+        }
+
+        log.debug("Fetching fields for measurement={}, range=[{} - {}]",
+                measurement, timeRangeInfo.getStartDate(), timeRangeInfo.getEndDate());
         //get user
          authService.getUser(token);
         // Query to fetch fields from a specific measurement in the bucket
-        String query = queryBuilderService.buildFieldsForMeasurementsQuery(measurement);
+        String query = queryBuilderService.buildFieldsForMeasurementsQuery(
+                measurement,
+                timeRangeInfo.getStartDate(),
+                timeRangeInfo.getEndDate());
 
         List<FluxTable> fluxTables = influxDBClient.getQueryApi().query(query);
 
